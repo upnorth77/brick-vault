@@ -101,7 +101,7 @@ function StorePage({ items: inventoryItems, blConfigured, settings, updateItems,
     setOrdersLoadState('loading');
     setOrdersLoadError('');
     try {
-      const resp = await fetch('/api/bricklink/orders?limit=50');
+      const resp = await fetch('/api/bricklink/orders?limit=10');
       const data = await resp.json();
       if (!resp.ok || data.error) {
         setOrdersLoadError(data.error || 'Failed to load BrickLink orders');
