@@ -808,78 +808,129 @@ function StorePage({ items: inventoryItems, blConfigured, settings, updateItems,
       return;
     }
 
-    const ROWS_PER_PAGE = 10;
     const allItems = order.items || [];
     const totalQty = allItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
-    const shopName = (settings?.shopName || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
-    const orderId = String(order.orderId || '').replace(/&/g, '&amp;');
-    const buyerName = String(order.buyerName || '—').replace(/&/g, '&amp;');
+    const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const shopName = esc(settings?.shopName || '');
+    const orderId = esc(order.orderId || '');
+    const buyerName = esc(order.buyerName || '—');
     const dateStr = order.dateOrdered ? new Date(order.dateOrdered).toLocaleString() : '';
 
-    // Split items into pages
+    const styles = `
+      @page { size: 4in 6in; margin: 0.15in; }
+      body { font-family: Arial, sans-serif; margin: 0; color: #000; }
+      .sheet { width: 3.7in; }
+      .sheet:not(:last-child) { page-break-after: always; }
+      .header { border-bottom: 1px solid #000; padding-bottom: 8px; margin-bottom: 8px; }
+      .title { font-size: 16px; font-weight: 700; }
+      .sub { font-size: 11px; margin-top: 3px; }
+      table { width: 100%; border-collapse: collapse; font-size: 11px; }
+      td { vertical-align: top; padding: 6px 0; border-bottom: 1px solid #ddd; }
+      tr { page-break-inside: avoid; }
+      .qty { width: 0.45in; font-size: 16px; font-weight: 700; text-align: center; }
+      .name { font-weight: 700; line-height: 1.2; }
+      .meta { color: #444; margin-top: 2px; line-height: 1.25; }
+      .footer { margin-top: 10px; font-size: 10px; color: #444; }
+    `;
+
+    const rowHtml = (item) => `
+      <tr>
+        <td class="qty">${item.quantity || 0}</td>
+        <td class="item">
+          <div class="name">${esc(item.name || item.itemNumber)}</div>
+          <div class="meta">${esc([item.itemNumber, item.colorName, typeLabel(item.itemType)].filter(Boolean).join(' · '))}</div>
+        </td>
+      </tr>`;
+
+    const firstHeaderHtml = `
+      <div class="header">
+        ${shopName ? `<div class="title">${shopName}</div>` : ''}
+        <div class="${shopName ? 'sub' : 'title'}">Pick List</div>
+        <div class="sub">Order #${orderId}</div>
+        <div class="sub">${buyerName}</div>
+        <div class="sub">${dateStr}</div>
+      </div>`;
+    const contHeaderHtml = (pageNum, totalPages) => `
+      <div class="header">
+        ${shopName ? `<div class="title">${shopName}</div>` : ''}
+        <div class="${shopName ? 'sub' : 'title'}">Pick List — Order #${orderId} continued (${pageNum}/${totalPages})</div>
+      </div>`;
+    const lastFooterHtml = (pageNum, totalPages) => `<div class="footer">Items: ${totalQty}${totalPages > 1 ? ` · Page ${pageNum}/${totalPages}` : ''}</div>`;
+    const midFooterHtml = (pageNum, totalPages) => `<div class="footer">Page ${pageNum}/${totalPages}</div>`;
+
+    // PAGE_CONTENT_HEIGHT_PX matches the .sheet content box: physical 6in page minus
+    // 0.15in top/bottom margin = 5.7in, at the CSS-standard 96px/in.
+    const PAGE_CONTENT_HEIGHT_PX = 5.7 * 96;
+    const SAFETY_MARGIN_PX = 8;
+
+    // Row and header/footer heights vary with item name/metadata length (wrapping),
+    // so measure actual rendered heights in the print window rather than assuming a
+    // fixed row count per page — a fixed count previously overflowed the physical
+    // page whenever names wrapped to a second line, silently pushing extra content
+    // onto trailing pages.
+    win.document.open();
+    win.document.write(`<!doctype html><html><head><style>${styles}
+      #measure { position: absolute; top: -10000px; left: 0; visibility: hidden; }
+      </style></head><body>
+      <div id="measure">
+        <div class="sheet"><div id="m-first-header">${firstHeaderHtml}</div></div>
+        <div class="sheet"><div id="m-cont-header">${contHeaderHtml(2, 9)}</div></div>
+        <div class="sheet"><div id="m-last-footer">${lastFooterHtml(9, 9)}</div></div>
+        <div class="sheet"><div id="m-mid-footer">${midFooterHtml(2, 9)}</div></div>
+        <table><tbody id="m-rows">${allItems.map(rowHtml).join('')}</tbody></table>
+      </div>
+      </body></html>`);
+    win.document.close();
+
+    const h = (id) => win.document.getElementById(id).getBoundingClientRect().height;
+    const firstHeaderH = h('m-first-header');
+    const contHeaderH  = h('m-cont-header');
+    // The item-total footer only ever lands on the last page, but which page that is
+    // isn't known until after chunking — so budget every page against the taller of
+    // the two footer variants to guarantee whichever one lands there still fits.
+    const footerH = Math.max(h('m-last-footer'), h('m-mid-footer'));
+    const rowHeights = Array.from(win.document.querySelectorAll('#m-rows tr')).map(el => el.getBoundingClientRect().height);
+
+    const availFirst = PAGE_CONTENT_HEIGHT_PX - firstHeaderH - footerH - SAFETY_MARGIN_PX;
+    const availCont   = PAGE_CONTENT_HEIGHT_PX - contHeaderH  - footerH - SAFETY_MARGIN_PX;
+
     const pages = [];
-    for (let i = 0; i < allItems.length; i += ROWS_PER_PAGE) {
-      pages.push(allItems.slice(i, i + ROWS_PER_PAGE));
+    let current = [];
+    let currentHeight = 0;
+    for (let i = 0; i < allItems.length; i++) {
+      const rowH = rowHeights[i] || 0;
+      const avail = pages.length === 0 ? availFirst : availCont;
+      if (current.length > 0 && currentHeight + rowH > avail) {
+        pages.push(current);
+        current = [];
+        currentHeight = 0;
+      }
+      current.push(allItems[i]);
+      currentHeight += rowH;
     }
-    if (pages.length === 0) pages.push([]);
+    if (current.length > 0 || pages.length === 0) pages.push(current);
     const totalPages = pages.length;
 
     // Build pages in REVERSE order so the printer's face-down stack comes out correct
     const pageBlocks = [...pages].reverse().map((pageItems, revIdx) => {
       const pageNum = totalPages - revIdx; // actual page number
-      const rows = pageItems.map(item => `
-        <tr>
-          <td class="qty">${item.quantity || 0}</td>
-          <td class="item">
-            <div class="name">${(item.name || item.itemNumber || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>
-            <div class="meta">${[item.itemNumber, item.colorName, typeLabel(item.itemType)].filter(Boolean).join(' · ').replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>
-          </td>
-        </tr>
-      `).join('');
-      const isFirst = pageNum === 1;
-      const header = isFirst ? `
-        <div class="header">
-          ${shopName ? `<div class="title">${shopName}</div>` : ''}
-          <div class="${shopName ? 'sub' : 'title'}">Pick List</div>
-          <div class="sub">Order #${orderId}</div>
-          <div class="sub">${buyerName}</div>
-          <div class="sub">${dateStr}</div>
-        </div>` : `
-        <div class="header">
-          ${shopName ? `<div class="title">${shopName}</div>` : ''}
-          <div class="${shopName ? 'sub' : 'title'}">Pick List — Order #${orderId} continued (${pageNum}/${totalPages})</div>
-        </div>`;
-      const footer = isFirst
-        ? `<div class="footer">Items: ${totalQty}${totalPages > 1 ? ` · Page 1/${totalPages}` : ''}</div>`
-        : `<div class="footer">Page ${pageNum}/${totalPages}</div>`;
+      const header = pageNum === 1 ? firstHeaderHtml : contHeaderHtml(pageNum, totalPages);
+      const footer = pageNum === totalPages ? lastFooterHtml(pageNum, totalPages) : midFooterHtml(pageNum, totalPages);
       return `
         <div class="sheet">
           ${header}
-          <table><tbody>${rows}</tbody></table>
+          <table><tbody>${pageItems.map(rowHtml).join('')}</tbody></table>
           ${footer}
         </div>`;
     }).join('');
 
+    win.document.open();
     win.document.write(`
       <!doctype html>
       <html>
       <head>
         <title>Pick List ${order.orderId}</title>
-        <style>
-          @page { size: 4in 6in; margin: 0.15in; }
-          body { font-family: Arial, sans-serif; margin: 0; color: #000; }
-          .sheet { width: 3.7in; min-height: 5.7in; }
-          .sheet:not(:last-child) { page-break-after: always; }
-          .header { border-bottom: 1px solid #000; padding-bottom: 8px; margin-bottom: 8px; }
-          .title { font-size: 16px; font-weight: 700; }
-          .sub { font-size: 11px; margin-top: 3px; }
-          table { width: 100%; border-collapse: collapse; font-size: 11px; }
-          td { vertical-align: top; padding: 6px 0; border-bottom: 1px solid #ddd; }
-          .qty { width: 0.45in; font-size: 16px; font-weight: 700; text-align: center; }
-          .name { font-weight: 700; line-height: 1.2; }
-          .meta { color: #444; margin-top: 2px; line-height: 1.25; }
-          .footer { margin-top: 10px; font-size: 10px; color: #444; }
-        </style>
+        <style>${styles}</style>
       </head>
       <body>${pageBlocks}</body>
       </html>
