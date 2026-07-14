@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Brick Vault – Lego Inventory</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React + Babel (CDN) -->
+  <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.23.2/babel.min.js"></script>
+
+  <!-- Plain JS utilities (no JSX — load order matters) -->
+  <script src="js/data.js"></script>
+  <script src="js/bricklink.js"></script>
+  <script src="js/rebrickable.js"></script>
+
+  <!-- JSX components (require HTTP server — run start.py) -->
+  <script type="text/babel" src="js/icons.js"></script>
+  <script type="text/babel" src="js/components/ItemModal.js"></script>
+  <script type="text/babel" src="js/components/SellQuantityModal.js"></script>
+  <script type="text/babel" src="js/components/SellLotModal.js"></script>
+  <script type="text/babel" src="js/components/BulkEditModal.js"></script>
+  <script type="text/babel" src="js/components/MergeDuplicatesModal.js"></script>
+  <script type="text/babel" src="js/components/InventoryPage.js"></script>
+  <script type="text/babel" src="js/components/ListingDetailModal.js"></script>
+  <script type="text/babel" src="js/components/SellingPage.js"></script>
+  <script type="text/babel" src="js/components/AnalyticsPage.js"></script>
+  <script type="text/babel" src="js/components/CatalogSearchPage.js"></script>
+  <script type="text/babel" src="js/components/PricingPage.js"></script>
+  <script type="text/babel" src="js/components/SettingsPage.js"></script>
+  <script type="text/babel" src="js/components/ConfigPage.js"></script>
+  <script type="text/babel" src="js/components/RedditMarketPage.js"></script>
+  <script type="text/babel" src="js/components/WantedListPage.js"></script>
+  <script type="text/babel" src="js/components/SalesOrdersPage.js"></script>
+  <script type="text/babel" src="js/components/SalesQuotePage.js"></script>
+  <script type="text/babel" src="js/components/StorePage.js"></script>
+  <script type="text/babel" src="js/components/App.js"></script>
+
+  <!-- Error boundary + Mount -->
+  <script type="text/babel">
+    class ErrorBoundary extends React.Component {
+      constructor(props) { super(props); this.state = { error: null }; }
+      static getDerivedStateFromError(error) { return { error }; }
+      componentDidCatch(error, info) { console.error('App render error:', error, info); }
+      render() {
+        if (this.state.error) {
+          return (
+            <div style={{ padding: 40, fontFamily: 'sans-serif', color: '#ccc', background: '#1a1a1a', minHeight: '100vh' }}>
+              <h2 style={{ color: '#e74c4c' }}>Something went wrong</h2>
+              <p style={{ color: '#aaa', marginBottom: 16 }}>A render error occurred. Your data is safe — it's saved to disk by the server.</p>
+              <pre style={{ fontSize: 12, color: '#888', background: '#111', padding: 16, borderRadius: 8, overflow: 'auto' }}>
+                {String(this.state.error)}
+              </pre>
+              <button onClick={() => this.setState({ error: null })}
+                style={{ marginTop: 20, padding: '8px 18px', background: '#4c8ce7', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>
+                Try to recover
+              </button>
+            </div>
+          );
+        }
+        return this.props.children;
+      }
+    }
+    ReactDOM.createRoot(document.getElementById('root')).render(
+      <ErrorBoundary><App /></ErrorBoundary>
+    );
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "bricklink": {
+    "consumerKey": "",
+    "consumerSecret": "",
+    "token": "",
+    "tokenSecret": ""
+  },
+  "ebay": {
+    "appId": "",
+    "certId": ""
+  },
+  "brickset": {
+    "apiKey": ""
+  }
+}
